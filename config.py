@@ -1,5 +1,13 @@
+import os
+import json
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
 class Config:
-    UPLOAD_DIR = "uploads"
-    MAX_FILE_SIZE = 1024 * 1024 * 100
-    ALLOW_EXT = {'.jpg', '.jpeg', '.png', '.gif', '.pdf', '.txt', '.mp4', '.mp3', '.zip'}
-    BASE_URL = "http://127.0.0.1:8000"
+    UPLOAD_DIR = os.getenv("UPLOAD_DIR")
+    MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE"))
+    ALLOW_EXT = set(json.loads(os.getenv("ALLOW_EXT")))
+    BASE_URL = os.getenv("BASE_URL")
