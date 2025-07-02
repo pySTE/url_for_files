@@ -11,3 +11,7 @@ class Config:
     MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE"))
     ALLOW_EXT = set(json.loads(os.getenv("ALLOW_EXT")))
     BASE_URL = os.getenv("BASE_URL")
+    DB_USERNAME = os.getenv("DB_USERNAME")
+    DB_PASSWORD = os.getenv("DB_PASSWORD")
+    DB_NAME = os.getenv("DB_NAME")
+    DB_HOST = os.getenv("DB_HOST")

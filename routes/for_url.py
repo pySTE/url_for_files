@@ -1,9 +1,13 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import FileResponse, JSONResponse
 from pathlib import Path
 import os
 import uuid
-
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import insert, update
+from database.connection import get_db
+from encode import int_to_base62
+from models.urls import Urls
 from config import Config
 
 router = APIRouter()
@@ -17,7 +21,10 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
 @router.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(
+        file: UploadFile = File(...),
+        session: AsyncSession = Depends(get_db)
+):
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
@@ -40,15 +47,44 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(500, detail=str(e))
 
     file_url = f"{BASE_URL}/files/{unique_name}"
-    return JSONResponse(
-        status_code=201,
-        content={
-            "status": "success",
-            "filename": unique_name,
-            "url": file_url,
-            "size": file_size
-        }
-    )
+
+    try:
+        result = await session.execute(
+            insert(Urls).values(
+                url=file_url,
+                path=unique_name,
+                short_path=None
+            ).returning(Urls.id))
+
+        url_id = result.scalar_one()
+        await session.commit()
+
+        short_path = int_to_base62(url_id)
+
+        await session.execute(
+            update(Urls)
+            .where(Urls.id == url_id)
+            .values(short_path=short_path)
+        )
+        await session.commit()
+
+        short_url = f"{BASE_URL}/{short_path}"
+
+        return JSONResponse(
+            status_code=201,
+            content={
+                "status": "success",
+                "id": url_id,
+                "filename": unique_name,
+                "url": file_url,
+                "short_url": short_url,
+                "size": file_size
+            }
+        )
+
+    except Exception as e:
+        await session.rollback()
+        raise HTTPException(500, detail=str(e))
 
 
 @router.get("/files/{filename}")
