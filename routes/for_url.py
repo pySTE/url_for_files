@@ -1,14 +1,20 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from fastapi.responses import FileResponse, JSONResponse
-from pathlib import Path
 import os
 import uuid
+from pathlib import Path
+
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.security import APIKeyHeader
+from sqlalchemy import insert, update, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import insert, update
+from passlib.hash import bcrypt
+
+
+from config import Config
 from database.connection import get_db
 from encode import int_to_base62
 from models.urls import Urls
-from config import Config
+from utils.jwt_handler import verify_access_token
 
 router = APIRouter()
 
@@ -19,12 +25,16 @@ BASE_URL = Config.BASE_URL
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+api_key_header = APIKeyHeader(name="Authorization", auto_error=True)
+
 
 @router.post("/upload")
 async def upload_file(
         file: UploadFile = File(...),
+        token: str = Depends(api_key_header),
         session: AsyncSession = Depends(get_db)
 ):
+    email = verify_access_token(token)
     file.file.seek(0, 2)
     file_size = file.file.tell()
     file.file.seek(0)
@@ -53,7 +63,9 @@ async def upload_file(
             insert(Urls).values(
                 url=file_url,
                 path=unique_name,
-                short_path=None
+                short_path=None,
+                user_email=email
+
             ).returning(Urls.id))
 
         url_id = result.scalar_one()
@@ -84,14 +96,28 @@ async def upload_file(
 
     except Exception as e:
         await session.rollback()
-        raise HTTPException(500, detail=str(e))
+        raise HTTPException(500)
 
 
 @router.get("/files/{filename}")
-async def get_file(filename: str):
+async def get_file(
+        filename: str,
+        token: str = Depends(api_key_header),
+        session: AsyncSession = Depends(get_db)
+):
+    email = verify_access_token(token)
+
+    result = await session.execute(
+        select(Urls).where(Urls.path == filename)
+    )
+    file_record = result.scalar_one_or_none()
+
+    if not file_record or file_record.user_email != email:
+        raise HTTPException(404)
+
     file_path = os.path.join(UPLOAD_DIR, filename)
 
-    if not os.path.exists(file_path) or not filename:
+    if not os.path.exists(file_path):
         raise HTTPException(404)
 
     return FileResponse(file_path)

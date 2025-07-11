@@ -1,5 +1,6 @@
-from database.connection import Base
 from sqlalchemy import Integer, String, Column
+
+from database.connection import Base
 
 
 class Urls(Base):
@@ -8,3 +9,4 @@ class Urls(Base):
     url = Column(String)
     path = Column(String)
     short_path = Column(String, nullable=True)
+    user_email = Column(String)
